@@ -31,6 +31,11 @@ input[type=text], input[type=number], input[type=password] {
 <script>
 const STRAVA_CLIENT_ID = "260339";
 
+// ── Infos course ──────────────────────────────────────────────────────────
+const RACE_NAME = "10 km Gem\'Aubagne";
+const RACE_URL = "https://new.sportsnconnect.com/client/events/4qa4QCJ1DtZYPSzSCbjJJK-5-and-10-km-gemaubagne";
+const RACE_LOCATION = "Aubagne";
+
 const PHASES = [
   { id:"construction", label:"Construction", weeks:[1,2,3,4,5], color:"#60a5fa" },
   { id:"affutage",     label:"Affûtage",     weeks:[6,7,8,9],   color:"#eab308" },
@@ -561,6 +566,17 @@ let githubToken = load("lk_github_token", "");
 let gistId = load("lk_gist_id", "");
 let gistMsg = "";
 let predHistory = load("lk_pred_history", []); // [{date, time, confidence}]
+let raceGoalTime = load("lk_race_goal", 2910); // 48'30" en secondes
+let runnerWeight = load("lk_weight", null);
+let runnerHeight = load("lk_height", null);
+let runnerFcMax = load("lk_fc_max", 181);
+let runnerPps = load("lk_pps", "");
+let raceHoraires = load("lk_race_horaires", { dossard: "", depart: "" });
+let raceParcoursUrl = load("lk_race_parcours", "");
+let checklistItems = load("lk_checklist", {
+  dossard: false, chaussures: false, montre: false,
+  pps: false, ravitaillement: false, tenue: false
+});
 let changelogExpanded = false;
 let currentPred = null; // résultat de predict10K, calculé une fois par render
 let isRebuilding = false;
@@ -810,12 +826,21 @@ async function fetchCoachMsg() {
   const vmaInfo = lastVma ? `Dernière VMA : ${fmtPace(lastVma.laps.filter(l=>l.average_speed>0&&1000/l.average_speed<330).reduce((s,l,_,a)=>s+l.average_speed/a.length,0))}/km` : "";
   const isLastTwoWeeks = cd <= 14;
 
-  const prompt = `Tu es coach running pour Laurent qui prépare un 10K le 6 septembre 2026 (objectif 48'30").
-Aujourd'hui : ${sessType} — ${sessDesc}.
+  const predNow = currentPred || predict10K();
+  const gapStr = predNow.gap <= 0 ? '-'+fmtTime(Math.abs(predNow.gap))+" de l'objectif" : '+'+fmtTime(predNow.gap)+" de l'objectif";
+  const todaySessionStatus = statuses[ALL_SESSIONS.find(s=>s.date===t&&s.type!=="REPOS")?.uid];
+  const sessionDone = todaySessionStatus==="✅"||todaySessionStatus==="⚠️"||todaySessionStatus==="❌";
+  const tomorrowKeyStr = new Date(new Date().getTime()+86400000).toISOString().slice(0,10);
+  const tomorrowKeySess = ALL_SESSIONS.find(s=>s.date===tomorrowKeyStr&&["VMA","SPEC","SEUIL","TEST"].includes(s.type));
+  const prompt = `Tu es Léa, coach running pour Laurent qui prépare le ${RACE_NAME} le 6 septembre 2026 à ${RACE_LOCATION} (objectif 48'30").
+Estimation actuelle : ${predNow.timeStr} (${gapStr}).
+Aujourd'hui : ${sessType} — ${sessDesc}.${sessionDone ? ' Séance '+todaySessionStatus+'.' : ''}${tomorrowKeySess ? ' Demain : '+tomorrowKeySess.type+' — '+tomorrowKeySess.session+'.' : ''}
+${weatherTemp ? 'Température : '+weatherTemp+'°C.' : ''}
 ${isLastTwoWeeks ? `J–${cd} avant la course.` : ""}
 ${vmaInfo}
-Génère UN message de coaching court (2-3 phrases max, ton naturel et motivant).
-${isLastTwoWeeks ? "Mentionne le compte à rebours." : "Ne mentionne pas la météo ni le nombre de jours restants."}
+Génère UN message de coaching court et personnalisé (2-3 phrases max, ton naturel et motivant).
+Parle de l'estimation et/ou de la séance du jour ou de demain si pertinent.
+${isLastTwoWeeks ? "Mentionne le compte à rebours." : "Ne mentionne pas le nombre de jours restants."}
 Réponds uniquement avec le message, sans guillemets.`;
 
   try {
@@ -1092,8 +1117,10 @@ function renderDashboard() {
   const heroPred=el("div",{style:{background:"linear-gradient(135deg,#1a1d27 0%,#1e1030 100%)",borderRadius:"16px",padding:"20px",marginBottom:"12px",border:"1px solid #f9731633",marginTop:"8px"}},
     el("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"16px"}},
       el("div",{},
-        el("div",{class:"label"},"Objectif · 6 sept. 2026"),
-        el("div",{style:{color:"#f97316",fontSize:"32px",fontWeight:"800",letterSpacing:"-1px",lineHeight:"1"}},"48\'30\""),
+        el("div",{class:"label"},"Objectif"),
+        el("a",{href:RACE_URL,target:"_blank",style:{color:"#f97316",fontSize:"14px",fontWeight:"700",textDecoration:"none",display:"block",marginBottom:"2px"}},"🏁 "+RACE_NAME+" ↗"),
+        el("div",{class:"muted",style:{fontSize:"11px",marginBottom:"4px"}},new Date("2026-09-06T00:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})+" · "+RACE_LOCATION),
+        el("div",{style:{color:"#f97316",fontSize:"32px",fontWeight:"800",letterSpacing:"-1px",lineHeight:"1"}},fmtTime(raceGoalTime)),
       ),
       svgCircle(gp,76,6,"#f97316",
         el("div",{style:{textAlign:"center"}},
@@ -1462,7 +1489,49 @@ function renderDashboard() {
     )
   ) : null;
 
-  return el("div",{style:{padding:"0 16px 100px"}},weatherEl,coachEl,fatigueEl,heroPred,nextKeyEl,todayEl||"",bilanEl,stravaSection);
+    // ── Barres de progression km + temps ─────────────────────────────────────
+  const totalKm = Math.round(stravaActivities.reduce((s,a)=>s+a.distance,0)/100)/10;
+  const totalMin = Math.round(stravaActivities.reduce((s,a)=>s+a.moving_time,0)/60);
+  const totalH = Math.floor(totalMin/60);
+  const totalMmin = totalMin%60;
+
+  // Calculer km et temps prévus total du plan
+  let plannedKmTotal = 0, plannedMinTotal = 0;
+  ALL_SESSIONS.filter(s=>s.type!=="REPOS"&&s.type!=="RACE").forEach(s=>{
+    const m1=s.session.match(/(\d+)(?:[–-](\d+))?\s*min/);
+    if(m1) plannedMinTotal += m1[2]?(parseInt(m1[1])+parseInt(m1[2]))/2:parseInt(m1[1]);
+    const m2=s.warmup.match(/(\d+)'/); if(m2) plannedMinTotal+=parseInt(m2[1]);
+    const m3=s.cooldown.match(/(\d+)'/); if(m3) plannedMinTotal+=parseInt(m3[1]);
+  });
+  plannedKmTotal = Math.round(plannedMinTotal/6.33*10)/10; // 6:20/km
+  const plannedH = Math.floor(plannedMinTotal/60);
+  const pctKm = Math.min(100,Math.round(totalKm/plannedKmTotal*100));
+  const pctMin = Math.min(100,Math.round(totalMin/plannedMinTotal*100));
+
+  const progressEl = stravaActivities.length>0 ? el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"10px 14px",marginBottom:"12px"}},
+    el("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}},
+      el("div",{style:{display:"flex",alignItems:"center",gap:"6px"}},
+        el("span",{style:{fontSize:"13px"}},"🏃"),
+        el("span",{class:"muted",style:{fontSize:"12px"}},totalKm+" km / ~"+Math.round(plannedKmTotal)+" km")
+      ),
+      el("span",{style:{color:"#22c55e",fontSize:"12px",fontWeight:"700"}},pctKm+"%")
+    ),
+    el("div",{style:{height:"4px",background:"#232738",borderRadius:"2px",marginBottom:"8px"}},
+      el("div",{style:{width:pctKm+"%",height:"100%",background:"#22c55e",borderRadius:"2px"}})
+    ),
+    el("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"4px"}},
+      el("div",{style:{display:"flex",alignItems:"center",gap:"6px"}},
+        el("span",{style:{fontSize:"13px"}},"⏱️"),
+        el("span",{class:"muted",style:{fontSize:"12px"}},totalH+"h"+(totalMmin).toString().padStart(2,"0")+"' / ~"+plannedH+"h prévues")
+      ),
+      el("span",{style:{color:"#22c55e",fontSize:"12px",fontWeight:"700"}},pctMin+"%")
+    ),
+    el("div",{style:{height:"4px",background:"#232738",borderRadius:"2px"}},
+      el("div",{style:{width:pctMin+"%",height:"100%",background:"#22c55e",borderRadius:"2px"}})
+    )
+  ) : null;
+
+  return el("div",{style:{padding:"0 16px 100px"}},weatherEl,fatigueEl,heroPred,progressEl,coachEl,nextKeyEl,todayEl||"",bilanEl,stravaSection);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1834,12 +1903,13 @@ function renderStats() {
     el("div",{class:"label"},"Informations"),
     el("div",{class:"card"},
       ...[
-        ["Objectif","48'30\" · 4:51/km","#f97316"],
-        ["Course","6 septembre 2026","#f1f5f9"],
+        ["Course",RACE_NAME,"#f97316"],
+        ["Date","6 septembre 2026 · "+RACE_LOCATION,"#f1f5f9"],
+        ["Objectif",fmtTime(raceGoalTime)+" · "+fmtPace(1000/(raceGoalTime/10000))+"/km","#f97316"],
         ["Référence","50'21\" (Lavandou)","#f1f5f9"],
         ["Allure EF","6:20/km · 6:40/km si chaud","#60a5fa"],
-        ["FC max","181 bpm","#f1f5f9"],
-        ["Prédicteur","Riegel + laps Strava v2","#f1f5f9"],
+        ["FC max",runnerFcMax+" bpm","#f1f5f9"],
+        ["Km courus",Math.round(stravaActivities.reduce((s,a)=>s+a.distance,0)/100)/10+" km","#22c55e"],
       ].map(([label,val,color])=>el("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:"6px"}},
         el("span",{class:"muted",style:{fontSize:"12px"}},label),
         el("span",{style:{color,fontSize:"12px",fontWeight:color==="#f1f5f9"?"400":"700"}},val)
@@ -1853,6 +1923,120 @@ function renderStats() {
     projEl,
     paceEl,
     infoEl
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COURSE
+// ══════════════════════════════════════════════════════════════════════════════
+function renderCourse() {
+  const cd = countdown();
+
+  const infoCard = el("div",{style:{background:"linear-gradient(135deg,#1a1d27 0%,#1e1030 100%)",border:"1px solid #f9731633",borderRadius:"12px",padding:"16px",marginBottom:"16px"}},
+    el("div",{style:{color:"#f97316",fontSize:"18px",fontWeight:"800",marginBottom:"4px"}},"🏁 "+RACE_NAME),
+    el("div",{class:"muted",style:{fontSize:"13px",marginBottom:"12px"}},new Date("2026-09-06T00:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})+" · "+RACE_LOCATION),
+    el("a",{href:RACE_URL,target:"_blank",style:{display:"block",background:"#f9731622",border:"1px solid #f9731644",borderRadius:"8px",padding:"10px 14px",color:"#f97316",fontSize:"13px",fontWeight:"700",textDecoration:"none",textAlign:"center",marginBottom:"12px"}},"🔗 Organisateur"),
+    el("div",{style:{display:"flex",gap:"8px"}},
+      el("div",{style:{flex:"1",background:"#232738",borderRadius:"8px",padding:"8px 10px",textAlign:"center"}},
+        el("div",{style:{color:"#f97316",fontSize:"14px",fontWeight:"700"}},fmtTime(raceGoalTime)),
+        el("div",{class:"muted",style:{fontSize:"10px"}},"Objectif")
+      ),
+      el("div",{style:{flex:"1",background:"#232738",borderRadius:"8px",padding:"8px 10px",textAlign:"center"}},
+        el("div",{style:{color:"#f97316",fontSize:"14px",fontWeight:"700"}},"J–"+cd),
+        el("div",{class:"muted",style:{fontSize:"10px"}},"Avant la course")
+      ),
+      el("div",{style:{flex:"1",background:"#232738",borderRadius:"8px",padding:"8px 10px",textAlign:"center"}},
+        el("div",{style:{color:"#f97316",fontSize:"14px",fontWeight:"700"}},fmtPace(1000/(raceGoalTime/10000))+"/km"),
+        el("div",{class:"muted",style:{fontSize:"10px"}},"Allure cible")
+      )
+    )
+  );
+
+  const horairesCard = el("div",{style:{marginBottom:"16px"}},
+    el("div",{class:"label"},"⏰ Horaires"),
+    el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"14px",display:"flex",flexDirection:"column",gap:"10px"}},
+      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        el("span",{class:"muted",style:{fontSize:"13px"}},"Retrait dossards"),
+        el("input",{type:"text",placeholder:"ex. 7h00",style:{width:"80px",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"4px 8px",color:"#f1f5f9",fontSize:"13px",textAlign:"right"},
+          value:raceHoraires.dossard||"",
+          onChange:(e)=>{ raceHoraires.dossard=e.target.value; save("lk_race_horaires",raceHoraires); }
+        })
+      ),
+      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        el("span",{class:"muted",style:{fontSize:"13px"}},"Départ course"),
+        el("input",{type:"text",placeholder:"ex. 9h30",style:{width:"80px",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"4px 8px",color:"#f1f5f9",fontSize:"13px",textAlign:"right"},
+          value:raceHoraires.depart||"",
+          onChange:(e)=>{ raceHoraires.depart=e.target.value; save("lk_race_horaires",raceHoraires); }
+        })
+      )
+    )
+  );
+
+  const CHECKLIST = [
+    {key:"dossard",label:"Dossard"},
+    {key:"pps",label:"PPS / Licence FFA"},
+    {key:"chaussures",label:"Chaussures de course"},
+    {key:"montre",label:"Montre GPS"},
+    {key:"tenue",label:"Tenue de course"},
+    {key:"ravitaillement",label:"Ravitaillement (eau, gel)"},
+  ];
+
+  const checklistCard = el("div",{style:{marginBottom:"16px"}},
+    el("div",{class:"label"},"🎽 Checklist équipement"),
+    el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"14px",display:"flex",flexDirection:"column",gap:"10px"}},
+      ...CHECKLIST.map(item=>{
+        const checked = checklistItems[item.key]||false;
+        const row = el("div",{style:{display:"flex",alignItems:"center",gap:"10px",cursor:"pointer"}},
+          el("div",{style:{
+            width:"18px",height:"18px",borderRadius:"4px",flexShrink:"0",
+            background:checked?"#f97316":"#232738",
+            border:checked?"1px solid #f97316":"1px solid #2e3347",
+            display:"flex",alignItems:"center",justifyContent:"center"
+          }}, checked?el("span",{style:{color:"#fff",fontSize:"12px",fontWeight:"700"}},"✓"):null),
+          el("span",{style:{color:checked?"#94a3b8":"#f1f5f9",fontSize:"13px",textDecoration:checked?"line-through":"none"}},item.label)
+        );
+        row.addEventListener("click",()=>{
+          checklistItems[item.key]=!checked;
+          save("lk_checklist",checklistItems);
+          render();
+        });
+        return row;
+      })
+    )
+  );
+
+  const strategieCard = el("div",{style:{marginBottom:"16px"}},
+    el("div",{class:"label"},"📋 Stratégie de course"),
+    el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"14px",display:"flex",flexDirection:"column",gap:"10px"}},
+      el("div",{style:{display:"flex",gap:"12px",alignItems:"center"}},
+        el("div",{style:{background:"#60a5fa22",border:"1px solid #60a5fa44",borderRadius:"6px",padding:"4px 8px",color:"#60a5fa",fontSize:"11px",fontWeight:"700",whiteSpace:"nowrap"}},"Km 1–3"),
+        el("span",{class:"muted",style:{fontSize:"12px"}},"Prudent · 4:55–5:00/km · laisser partir")
+      ),
+      el("div",{style:{display:"flex",gap:"12px",alignItems:"center"}},
+        el("div",{style:{background:"#f9731622",border:"1px solid #f9731644",borderRadius:"6px",padding:"4px 8px",color:"#f97316",fontSize:"11px",fontWeight:"700",whiteSpace:"nowrap"}},"Km 4–7"),
+        el("span",{class:"muted",style:{fontSize:"12px"}},"Allure cible · 4:51/km · contrôle")
+      ),
+      el("div",{style:{display:"flex",gap:"12px",alignItems:"center"}},
+        el("div",{style:{background:"#22c55e22",border:"1px solid #22c55e44",borderRadius:"6px",padding:"4px 8px",color:"#22c55e",fontSize:"11px",fontWeight:"700",whiteSpace:"nowrap"}},"Km 8–10"),
+        el("span",{class:"muted",style:{fontSize:"12px"}},"Tout donner · accélération finale")
+      )
+    )
+  );
+
+  const parcoursCard = el("div",{style:{marginBottom:"16px"}},
+    el("div",{class:"label"},"🗺️ Parcours"),
+    el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"14px"}},
+      el("input",{type:"text",placeholder:"Lien GPX ou carte du parcours...",style:{width:"100%",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"8px 12px",color:"#f1f5f9",fontSize:"13px"},
+        value:raceParcoursUrl,
+        onChange:(e)=>{ raceParcoursUrl=e.target.value; save("lk_race_parcours",raceParcoursUrl); }
+      }),
+      raceParcoursUrl?el("a",{href:raceParcoursUrl,target:"_blank",style:{display:"block",marginTop:"8px",color:"#60a5fa",fontSize:"12px"}},"→ Voir le parcours"):null
+    )
+  );
+
+  return el("div",{style:{padding:"0 16px 100px"}},
+    el("div",{style:{marginTop:"8px"}}),
+    infoCard, horairesCard, checklistCard, strategieCard, parcoursCard
   );
 }
 
@@ -1894,6 +2078,81 @@ function renderSettings() {
         )
   );
 
+  // ── Profil coureur ────────────────────────────────────────────────────────
+  const profileSection = el("div",{style:{marginBottom:"24px"}},
+    el("div",{class:"label"},"👤 Profil coureur"),
+    el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"14px",display:"flex",flexDirection:"column",gap:"10px"}},
+      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        el("span",{class:"muted",style:{fontSize:"13px"}},"Poids"),
+        el("div",{style:{display:"flex",alignItems:"center",gap:"6px"}},
+          el("input",{type:"number",placeholder:"kg",style:{width:"60px",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"4px 8px",color:"#f1f5f9",fontSize:"13px",textAlign:"right"},
+            value:runnerWeight||"",
+            onChange:(e)=>{ runnerWeight=parseInt(e.target.value)||null; save("lk_weight",runnerWeight); }
+          }),
+          el("span",{class:"muted",style:{fontSize:"12px"}},"kg")
+        )
+      ),
+      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        el("span",{class:"muted",style:{fontSize:"13px"}},"Taille"),
+        el("div",{style:{display:"flex",alignItems:"center",gap:"6px"}},
+          el("input",{type:"number",placeholder:"cm",style:{width:"60px",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"4px 8px",color:"#f1f5f9",fontSize:"13px",textAlign:"right"},
+            value:runnerHeight||"",
+            onChange:(e)=>{ runnerHeight=parseInt(e.target.value)||null; save("lk_height",runnerHeight); }
+          }),
+          el("span",{class:"muted",style:{fontSize:"12px"}},"cm")
+        )
+      ),
+      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        el("span",{class:"muted",style:{fontSize:"13px"}},"FC max"),
+        el("div",{style:{display:"flex",alignItems:"center",gap:"6px"}},
+          el("input",{type:"number",style:{width:"60px",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"4px 8px",color:"#f1f5f9",fontSize:"13px",textAlign:"right"},
+            value:runnerFcMax||181,
+            onChange:(e)=>{ runnerFcMax=parseInt(e.target.value)||181; save("lk_fc_max",runnerFcMax); }
+          }),
+          el("span",{class:"muted",style:{fontSize:"12px"}},"bpm")
+        )
+      )
+    )
+  );
+
+  // ── Objectif modifiable ───────────────────────────────────────────────────
+  const goalSection = el("div",{style:{marginBottom:"24px"}},
+    el("div",{class:"label"},"🎯 Objectif"),
+    el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"14px",display:"flex",flexDirection:"column",gap:"10px"}},
+      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        el("span",{class:"muted",style:{fontSize:"13px"}},"Temps cible"),
+        el("div",{style:{display:"flex",alignItems:"center",gap:"6px"}},
+          el("input",{type:"text",placeholder:"48:30",style:{width:"70px",background:"#232738",border:"1px solid #f9731644",borderRadius:"6px",padding:"4px 8px",color:"#f97316",fontSize:"13px",fontWeight:"700",textAlign:"right"},
+            value:Math.floor(raceGoalTime/60)+":"+(raceGoalTime%60).toString().padStart(2,"0"),
+            onChange:(e)=>{
+              const parts=e.target.value.split(":");
+              if(parts.length===2){
+                const secs=parseInt(parts[0])*60+parseInt(parts[1]);
+                if(!isNaN(secs)&&secs>0){raceGoalTime=secs;save("lk_race_goal",raceGoalTime);render();}
+              }
+            }
+          })
+        )
+      ),
+      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        el("span",{class:"muted",style:{fontSize:"13px"}},"Allure cible"),
+        el("span",{style:{color:"#f97316",fontSize:"13px",fontWeight:"700"}},fmtPace(1000/(raceGoalTime/10000))+"/km")
+      )
+    )
+  );
+
+  // ── PPS ───────────────────────────────────────────────────────────────────
+  const ppsSection = el("div",{style:{marginBottom:"24px"}},
+    el("div",{class:"label"},"🪪 PPS"),
+    el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"14px"}},
+      el("input",{type:"text",placeholder:"Votre code PPS...",style:{width:"100%",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"8px 12px",color:"#f1f5f9",fontSize:"13px"},
+        value:runnerPps,
+        onChange:(e)=>{ runnerPps=e.target.value; save("lk_pps",runnerPps); }
+      }),
+      el("div",{class:"muted",style:{fontSize:"11px",marginTop:"6px"}},"Requis pour l\'inscription aux courses FFA")
+    )
+  );
+
   const stravaSection=el("div",{style:{marginBottom:"24px"}},
     el("div",{class:"label"},"Strava"),
     stravaToken
@@ -1924,7 +2183,18 @@ function renderSettings() {
 
   const versionSection = (function buildVersionSection() {
     const VERSIONS = [
-      { ver:"v1.8.11", title:"Séance terminée & Gist", current:true, notes:[
+      { ver:"v1.8.12", title:"Course, profil & dashboard", current:true, notes:[
+        "🗑️ Suppression du header sur le dashboard",
+        "🏁 Nom de la course cliquable (Gem\'Aubagne)",
+        "📊 Barres de progression km + temps",
+        "🤖 Coach enrichi (estimation, séance, météo)",
+        "🏁 Nouvel onglet Course (infos, horaires, checklist, stratégie)",
+        "👤 Profil coureur dans Paramètres",
+        "🎯 Objectif de temps modifiable",
+        "🪪 Champ PPS dans Paramètres",
+        "🔧 Vérification des fonctions critiques",
+      ]},
+      { ver:"v1.8.11", title:"Séance terminée & Gist", current:false, notes:[
         "✅ Carte Aujourd\'hui enrichie quand séance terminée",
         "📊 Données Strava + répétitions sur le dashboard",
         "📅 Prochaine séance affichée en bas de carte",
@@ -2025,7 +2295,7 @@ function renderSettings() {
 
   return el("div",{style:{padding:"0 16px 100px"}},
     el("div",{style:{marginTop:"8px",marginBottom:"20px"}}),
-    cloudSection, stravaSection, versionSection
+    profileSection, goalSection, ppsSection, cloudSection, stravaSection, versionSection
   );
 }
 
@@ -2374,12 +2644,13 @@ function render() {
   const app=document.getElementById("app");
   app.innerHTML="";
 
+  // Header uniquement pour les vues secondaires (pas le dashboard)
   const backBtn=view==="weekDetail"
     ?el("button",{style:{background:"none",border:"none",color:"#f97316",fontSize:"22px",cursor:"pointer",padding:"0",lineHeight:"1",marginRight:"4px"},onClick:()=>setView("weeks")},"‹")
     :null;
 
-  const titles={dashboard:"Plan 10K",weeks:"Semaines",weekDetail:"Semaine "+selectedWeek,stats:"Stats",settings:"Paramètres"};
-  const hdr=el("div",{style:{position:"sticky",top:"0",zIndex:"10",background:"rgba(15,17,23,0.95)",backdropFilter:"blur(12px)",borderBottom:"1px solid #2e3347",padding:"12px 16px 10px",display:"flex",alignItems:"center",gap:"6px"}},
+  const titles={weeks:"Semaines",weekDetail:"Semaine "+selectedWeek,stats:"Stats",settings:"Paramètres",course:"Course"};
+  const hdr = view==="dashboard" ? null : el("div",{style:{position:"sticky",top:"0",zIndex:"10",background:"rgba(15,17,23,0.95)",backdropFilter:"blur(12px)",borderBottom:"1px solid #2e3347",padding:"12px 16px 10px",display:"flex",alignItems:"center",gap:"6px"}},
     backBtn||"",
     el("div",{style:{flex:"1"}},
       el("div",{style:{color:"#f1f5f9",fontSize:"17px",fontWeight:"700",lineHeight:"1"}},titles[view]||""),
@@ -2396,15 +2667,17 @@ function render() {
   else if (view==="weeks") content=renderWeeks();
   else if (view==="weekDetail") content=renderWeekDetail(selectedWeek);
   else if (view==="stats") content=renderStats();
+  else if (view==="course") content=renderCourse();
   else content=renderSettings();
 
   const NAV=[
     {id:"dashboard",icon:"⚡",label:"Dashboard"},
     {id:"weeks",    icon:"📅",label:"Semaines"},
     {id:"stats",    icon:"📊",label:"Stats"},
+    {id:"course",   icon:"🏁",label:"Course"},
     {id:"settings", icon:"⚙️",label:"Paramètres"},
   ];
-  const activeNav=["dashboard","stats","settings"].includes(view)?view:"weeks";
+  const activeNav=["dashboard","stats","settings","course"].includes(view)?view:"weeks";
   const nav=el("div",{style:{position:"fixed",bottom:"0",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"430px",background:"rgba(26,29,39,0.97)",backdropFilter:"blur(16px)",borderTop:"1px solid #2e3347",display:"flex",zIndex:"20"}},
     ...NAV.map(n=>{
       const hasBadge = n.id==="dashboard" && (() => {
@@ -2425,9 +2698,16 @@ function render() {
     })
   );
 
-  app.appendChild(hdr);
+  if (hdr) app.appendChild(hdr);
   app.appendChild(content);
   app.appendChild(nav);
+}
+
+// ── Vérification des fonctions critiques ────────────────────────────────────
+const CRITICAL_FNS = ['syncStrava','gistSave','gistLoad','predict10K','getEffortLaps','rebuildPredHistory','renderDashboard','renderWeeks','renderWeekDetail','el','badge'];
+const missingFns = CRITICAL_FNS.filter(fn => typeof window[fn] === 'undefined');
+if (missingFns.length > 0) {
+  console.warn('⚠️ Fonctions manquantes:', missingFns.join(', '));
 }
 
 render();
