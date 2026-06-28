@@ -1960,7 +1960,9 @@ function renderStats() {
     const newest = recent[recent.length-1].time;
     const deltaPerDay = (newest - oldest) / Math.max(recent.length - 1, 1);
     const daysLeft = countdown();
-    const projectedTime = Math.round(newest + deltaPerDay * daysLeft);
+    // Limiter la projection à ±3 min max pour éviter les valeurs folles
+    const deltaPerDayCapped = Math.max(-10, Math.min(10, deltaPerDay));
+    const projectedTime = Math.round(newest + deltaPerDayCapped * daysLeft);
     const trend = deltaPerDay < -5 ? "📉 En progression" : deltaPerDay > 5 ? "📈 En régression" : "➡️ Stable";
     const trendColor = deltaPerDay < -5 ? "#22c55e" : deltaPerDay > 5 ? "#ef4444" : "#94a3b8";
 
@@ -2128,7 +2130,7 @@ function renderCourse() {
   // ── Météo prévue le jour de la course ───────────────────────────────────
   let meteoRaceEl = null;
   // Fetch météo si on est à moins de 16 jours (Open-Meteo limite à 16 jours)
-  const daysToRace = countdown();
+  const daysToRace = Math.max(0, parseInt(countdown())||0);
   if (daysToRace <= 16) {
     // La météo sera fetchée et affichée
     meteoRaceEl = el("div",{style:{marginBottom:"16px"}},
@@ -2177,11 +2179,12 @@ function renderCourse() {
         el("span",{class:"muted",style:{fontSize:"10px",fontWeight:"700",textAlign:"right"}},"PASSAGE")
       ),
       ...splits.map((s,i)=>{
-        const paceStr = s.pace ? Math.floor(s.pace/60)+":"+(Math.round(s.pace%60)).toString().padStart(2,"0")+"/km" : "—";
-        const passageStr = fmtTime(passageTimes[i]);
+        const effectivePace = s.pace || paceSecKm;
+        const paceStr = s.km===10 ? "tout donner" : Math.floor(effectivePace/60)+":"+(Math.round(effectivePace%60)).toString().padStart(2,"0")+"/km";
+        const passageStr = fmtTime(passageTimes[i]) || "--";
         const color = i===0||i===1?"#60a5fa":i===2||i===3?"#f97316":"#22c55e";
         return el("div",{style:{display:"grid",gridTemplateColumns:"40px 1fr 70px 70px",gap:"0",padding:"10px 12px",borderBottom:i<splits.length-1?"1px solid #2e3347":"none",alignItems:"center"}},
-          el("span",{style:{color,fontSize:"14px",fontWeight:"800"}},s.km),
+          el("span",{style:{color,fontSize:"14px",fontWeight:"800"}},""+s.km),
           el("span",{class:"muted",style:{fontSize:"12px"}},s.note),
           el("span",{style:{color:"#f1f5f9",fontSize:"12px",fontWeight:"600",textAlign:"right"}},paceStr),
           el("span",{style:{color,fontSize:"12px",fontWeight:"700",textAlign:"right"}},passageStr)
