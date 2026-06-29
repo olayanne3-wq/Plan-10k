@@ -2532,9 +2532,8 @@ function renderSettings() {
       el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
         el("span",{class:"muted",style:{fontSize:"13px"}},"FC max"),
         el("div",{style:{display:"flex",alignItems:"center",gap:"6px"}},
-          el("input",{type:"number",style:{width:"60px",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"4px 8px",color:"#f1f5f9",fontSize:"13px",textAlign:"right"},
-            value:runnerFcMax||181,
-            onChange:(e)=>{ runnerFcMax=parseInt(e.target.value)||181; save("lk_fc_max",runnerFcMax); }
+          el("input",{type:"number",id:"inp-fcmax",style:{width:"60px",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"4px 8px",color:"#f1f5f9",fontSize:"13px",textAlign:"right"},
+            value:runnerFcMax||181
           }),
           el("span",{class:"muted",style:{fontSize:"12px"}},"bpm")
         )
@@ -2549,7 +2548,7 @@ function renderSettings() {
       el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
         el("span",{class:"muted",style:{fontSize:"13px"}},"Temps cible"),
         el("div",{style:{display:"flex",alignItems:"center",gap:"6px"}},
-          el("input",{type:"text",placeholder:"48:30",style:{width:"70px",background:"#232738",border:"1px solid #f9731644",borderRadius:"6px",padding:"4px 8px",color:"#f97316",fontSize:"13px",fontWeight:"700",textAlign:"right"},
+          el("input",{type:"text",placeholder:"48:30",id:"inp-goal",style:{width:"70px",background:"#232738",border:"1px solid #f9731644",borderRadius:"6px",padding:"4px 8px",color:"#f97316",fontSize:"13px",fontWeight:"700",textAlign:"right"},
             value:Math.floor(raceGoalTime/60)+":"+(raceGoalTime%60).toString().padStart(2,"0"),
             onChange:(e)=>{
               const parts=e.target.value.split(":");
@@ -2805,10 +2804,30 @@ function renderSettings() {
     )
   );
 
+  // ── Bouton global Enregistrer ─────────────────────────────────────────────
+  const saveBtn = document.createElement("button");
+  saveBtn.style.cssText = "width:100%;background:linear-gradient(135deg,#f97316,#ea6b0e);border:none;border-radius:12px;padding:14px;color:#fff;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:24px;";
+  saveBtn.textContent = "💾 Enregistrer les paramètres";
+  saveBtn.addEventListener("click", ()=>{
+    // Lire toutes les valeurs des inputs
+    const poids = document.getElementById("inp-poids"); if(poids) { runnerWeight=parseInt(poids.value)||null; save("lk_weight",runnerWeight); }
+    const taille = document.getElementById("inp-taille"); if(taille) { runnerHeight=parseInt(taille.value)||null; save("lk_height",runnerHeight); }
+    const fcmax = document.getElementById("inp-fcmax"); if(fcmax) { runnerFcMax=parseInt(fcmax.value)||181; save("lk_fc_max",runnerFcMax); }
+    const pps = document.getElementById("pps-input"); if(pps) { runnerPps=pps.value.trim(); save("lk_pps",runnerPps); }
+    const goal = document.getElementById("inp-goal"); if(goal) {
+      const parts=goal.value.split(":"); if(parts.length===2){const s=parseInt(parts[0])*60+parseInt(parts[1]); if(!isNaN(s)&&s>0){raceGoalTime=s;save("lk_race_goal",raceGoalTime);}}
+    }
+    gistSave(true);
+    saveBtn.textContent = "✅ Paramètres enregistrés !";
+    setTimeout(()=>{ saveBtn.textContent = "💾 Enregistrer les paramètres"; }, 2000);
+    render();
+  });
+
   return el("div",{style:{padding:"0 16px 100px"}},
     el("div",{style:{marginTop:"8px"}}),
     appHeaderEl,
     profileSection, goalSection, ppsSection, stravaSection,
+    saveBtn,
     el("div",{style:{marginBottom:"24px"}}, advancedToggle, advancedContent),
     githubToken ? qrSection : null,
     versionSection
