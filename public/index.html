@@ -965,6 +965,19 @@ function economyLabel(score, n) {
   return "❤️";
 }
 
+
+// ── Icône Run by Léa inline ─────────────────────────────────────────────────
+function runByLeaIcon(size, radius) {
+  const r = radius || Math.round(size * 0.22);
+  const el2 = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  el2.setAttribute("width", size); el2.setAttribute("height", size);
+  el2.setAttribute("viewBox","0 0 512 512");
+  el2.style.borderRadius = r+"px";
+  el2.style.flexShrink = "0";
+  el2.innerHTML = `<rect width="512" height="512" rx="114" fill="#f97316"/><g stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M300 206 L258 200 L240 162" stroke-width="22"/><path d="M300 206 L344 232 L330 274" stroke-width="22"/><path d="M300 206 L272 298" stroke-width="34"/><path d="M272 298 L234 350 L196 392" stroke-width="30"/><path d="M272 298 L320 332 L356 388" stroke-width="30"/></g><path d="M300 206 L314 178" stroke="#ffffff" stroke-width="22" stroke-linecap="round"/><circle cx="322" cy="152" r="33" fill="#ffffff"/><g stroke="#ffffff" stroke-linecap="round"><line x1="116" y1="200" x2="184" y2="200" stroke-width="13" opacity="0.5"/><line x1="94" y1="248" x2="172" y2="248" stroke-width="13" opacity="0.36"/><line x1="124" y1="296" x2="178" y2="296" stroke-width="13" opacity="0.24"/></g>`;
+  return el2;
+}
+
 function getEffortLaps(activity) {
   if (!activity.laps || !activity.laps.length) return [];
   const laps = activity.laps.filter(l => l.average_speed > 0);
@@ -1305,7 +1318,10 @@ function renderDashboard() {
   },"🔄");
   const coachEl = el("div",{style:{background:"#1a1d27",border:"1px solid "+coachBorderColor,borderRadius:"10px",padding:"12px 14px",marginBottom:"12px"}},
     el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"6px"}},
-      el("div",{class:"muted",style:{fontSize:"10px",textTransform:"uppercase",letterSpacing:"0.5px"}},coachLabel),
+      el("div",{style:{display:"flex",alignItems:"center",gap:"7px"}},
+        runByLeaIcon(20, 5),
+        el("span",{class:"muted",style:{fontSize:"10px",textTransform:"uppercase",letterSpacing:"0.5px"}},coachLabel)
+      ),
       refreshCoachBtn
     ),
     el("div",{style:{color:"#f1f5f9",fontSize:"13px",fontStyle:"italic",lineHeight:"1.5"}},coachMsg||el("span",{class:"muted",style:{fontSize:"12px"}},"Chargement..."))
@@ -1657,7 +1673,18 @@ function renderDashboard() {
     )
   ) : null;
 
-  return el("div",{style:{padding:"0 16px 100px"}},weatherEl,fatigueEl,heroPred,progressEl,coachEl,nextKeyEl,todayEl||"",bilanEl,stravaSection);
+  const dashHeaderEl = el("div",{style:{
+    display:"flex",alignItems:"center",gap:"8px",
+    padding:"12px 0 10px",marginBottom:"4px",
+    borderBottom:"1px solid #2e3347"
+  }},
+    runByLeaIcon(24, 6),
+    el("div",{style:{color:"#f1f5f9",fontSize:"16px",fontWeight:"800"}},"Run by Léa"),
+    el("div",{style:{flex:"1"}}),
+    el("div",{style:{background:"#232738",borderRadius:"8px",padding:"4px 10px",color:"#f97316",fontSize:"12px",fontWeight:"700"}},"J–"+countdown())
+  );
+
+  return el("div",{style:{padding:"0 16px 100px"}},dashHeaderEl,weatherEl,fatigueEl,heroPred,progressEl,coachEl,nextKeyEl,todayEl||"",bilanEl,stravaSection);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2097,6 +2124,26 @@ function renderStats() {
       vp.forEach(p=>{
         const x=PL+(p.week-1)/10*(W-PL);
         const y=PT+(1-(p[yKey]-minY)/(maxY-minY))*H;
+        // Zone cliquable invisible plus grande
+        const hitArea=document.createElementNS("http://www.w3.org/2000/svg","circle");
+        hitArea.setAttribute("cx",x); hitArea.setAttribute("cy",y); hitArea.setAttribute("r","12");
+        hitArea.setAttribute("fill","transparent"); hitArea.style.cursor="pointer";
+        hitArea.addEventListener("click",()=>{
+          const existing = svg.parentNode.querySelector(".ie-tooltip");
+          if (existing) existing.remove();
+          const tip = document.createElement("div");
+          tip.className = "ie-tooltip";
+          tip.style.cssText = "position:absolute;background:#232738;border:1px solid #2e3347;border-radius:8px;padding:8px 10px;font-size:11px;color:#f1f5f9;pointer-events:none;z-index:10;white-space:nowrap;";
+          tip.innerHTML = `<span style="color:${color};font-weight:700">${type} · S${p.week}</span><br>${yKey==="ie"?"IE":"Cadence"} : <b>${p[yKey]}</b>${yKey==="cad"?" spm":""}`;
+          const svgRect = svg.getBoundingClientRect();
+          const parentRect = svg.parentNode.getBoundingClientRect();
+          tip.style.left = (svgRect.left - parentRect.left + x * svgRect.width/W - 50)+"px";
+          tip.style.top = (svgRect.top - parentRect.top + y * svgRect.height/(H+PT+PB+14) - 60)+"px";
+          svg.parentNode.style.position="relative";
+          svg.parentNode.appendChild(tip);
+          setTimeout(()=>tip.remove(), 3000);
+        });
+        svg.appendChild(hitArea);
         const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
         c.setAttribute("cx",x); c.setAttribute("cy",y); c.setAttribute("r","4"); c.setAttribute("fill",color);
         svg.appendChild(c);
@@ -2233,8 +2280,14 @@ function renderCourse() {
   const cd = countdown();
 
   const infoCard = el("div",{style:{background:"linear-gradient(135deg,#1a1d27 0%,#1e1030 100%)",border:"1px solid #f9731633",borderRadius:"12px",padding:"16px",marginBottom:"16px"}},
-    el("div",{style:{color:"#f97316",fontSize:"18px",fontWeight:"800",marginBottom:"4px"}},"🏁 "+RACE_NAME),
-    el("div",{class:"muted",style:{fontSize:"13px",marginBottom:"12px"}},new Date("2026-09-06T00:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})+" · "+RACE_LOCATION),
+    el("div",{style:{display:"flex",alignItems:"center",gap:"14px",marginBottom:"12px"}},
+      runByLeaIcon(52, 12),
+      el("div",{},
+        el("div",{style:{color:"#f97316",fontSize:"17px",fontWeight:"800",marginBottom:"2px"}},"🏁 "+RACE_NAME),
+        el("div",{class:"muted",style:{fontSize:"12px",marginBottom:"2px"}},new Date("2026-09-06T00:00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})+" · "+RACE_LOCATION),
+        el("div",{style:{color:"#475569",fontSize:"11px"}},"Run by Léa")
+      )
+    ),
     el("a",{href:RACE_URL,target:"_blank",style:{display:"block",background:"#f9731622",border:"1px solid #f9731644",borderRadius:"8px",padding:"10px 14px",color:"#f97316",fontSize:"13px",fontWeight:"700",textDecoration:"none",textAlign:"center",marginBottom:"12px"}},"🔗 Organisateur"),
     el("div",{style:{display:"flex",gap:"8px"}},
       el("div",{style:{flex:"1",background:"#232738",borderRadius:"8px",padding:"8px 10px",textAlign:"center"}},
@@ -2690,8 +2743,17 @@ function renderSettings() {
     advancedToggle.textContent=advancedOpen?"⚙️ Masquer les options avancées":"⚙️ Options avancées";
   });
 
+  const appHeaderEl = el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"14px",display:"flex",alignItems:"center",gap:"12px",marginBottom:"20px"}},
+    runByLeaIcon(40, 10),
+    el("div",{},
+      el("div",{style:{color:"#f1f5f9",fontSize:"16px",fontWeight:"800"}},"Run by Léa"),
+      el("div",{class:"muted",style:{fontSize:"12px"}},"v1.8.15 · plan-10k-alpha.vercel.app")
+    )
+  );
+
   return el("div",{style:{padding:"0 16px 100px"}},
-    el("div",{style:{marginTop:"8px",marginBottom:"20px"}}),
+    el("div",{style:{marginTop:"8px"}}),
+    appHeaderEl,
     profileSection, goalSection, ppsSection, stravaSection,
     el("div",{style:{marginBottom:"24px"}}, advancedToggle, advancedContent),
     versionSection
@@ -3071,8 +3133,9 @@ function render() {
     :null;
 
   const titles={weeks:"Semaines",weekDetail:"Semaine "+selectedWeek,stats:"Stats",settings:"Paramètres",course:"Course"};
-  const hdr = view==="dashboard" ? null : el("div",{style:{position:"sticky",top:"0",zIndex:"10",background:"rgba(15,17,23,0.95)",backdropFilter:"blur(12px)",borderBottom:"1px solid #2e3347",padding:"12px 16px 10px",display:"flex",alignItems:"center",gap:"6px"}},
+  const hdr = view==="dashboard" ? null : el("div",{style:{position:"sticky",top:"0",zIndex:"10",background:"rgba(15,17,23,0.95)",backdropFilter:"blur(12px)",borderBottom:"1px solid #2e3347",padding:"12px 16px 10px",display:"flex",alignItems:"center",gap:"8px"}},
     backBtn||"",
+    runByLeaIcon(24, 6),
     el("div",{style:{flex:"1"}},
       el("div",{style:{color:"#f1f5f9",fontSize:"17px",fontWeight:"700",lineHeight:"1"}},titles[view]||""),
       view==="weekDetail"?el("div",{class:"muted",style:{fontSize:"11px",marginTop:"1px"}},phaseOf(selectedWeek).label):null
