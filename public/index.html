@@ -2578,11 +2578,13 @@ function renderSettings() {
   const ppsSection = el("div",{style:{marginBottom:"24px"}},
     el("div",{class:"label"},"🪪 PPS"),
     el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"14px"}},
-      el("input",{type:"text",placeholder:"Votre code PPS...",style:{width:"100%",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"8px 12px",color:"#f1f5f9",fontSize:"13px"},
-        value:runnerPps,
-        onInput:(e)=>{ runnerPps=e.target.value; save("lk_pps",runnerPps); },
-        onBlur:(e)=>{ runnerPps=e.target.value; save("lk_pps",runnerPps); scheduleSave(); }
-      }),
+(()=>{
+        const inp = el("input",{type:"text",placeholder:"Votre code PPS...",id:"pps-input",style:{width:"100%",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"8px 12px",color:"#f1f5f9",fontSize:"13px"},
+          onInput:(e)=>{ runnerPps=e.target.value; save("lk_pps",runnerPps); scheduleSave(); }
+        });
+        setTimeout(()=>{ const el2=document.getElementById("pps-input"); if(el2&&runnerPps) el2.value=runnerPps; },50);
+        return inp;
+      })(),
       el("div",{class:"muted",style:{fontSize:"11px",marginTop:"6px"}},"Requis pour l\'inscription aux courses FFA")
     )
   );
