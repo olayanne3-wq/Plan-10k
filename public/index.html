@@ -1544,8 +1544,19 @@ function renderDashboard() {
             el("div",{style:{display:"flex",gap:"14px",flexWrap:"wrap",marginBottom:effortLaps2.length>0?"8px":"0"}},
               el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},(stravaRun2.distance/1000).toFixed(2)+"km"),el("div",{class:"muted",style:{fontSize:"11px"}},"distance")),
               el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},fmtTime(stravaRun2.moving_time)),el("div",{class:"muted",style:{fontSize:"11px"}},"durée")),
-              el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},fmtPace(stravaRun2.average_speed)+"/km"),el("div",{class:"muted",style:{fontSize:"11px"}},"allure moy.")),
-              stravaRun2.average_heartrate?el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},Math.round(stravaRun2.average_heartrate)+" bpm"),el("div",{class:"muted",style:{fontSize:"11px"}},"FC moy.")):null,
+              (()=>{
+                const isIntensive2 = effortLaps2.length > 0;
+                const dispPace2 = isIntensive2 ? effortLaps2.reduce((s,l)=>s+l.average_speed,0)/effortLaps2.length : stravaRun2.average_speed;
+                const paceLabel2 = isIntensive2 ? "allure intervalles" : "allure moy.";
+                return el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},fmtPace(dispPace2)+"/km"),el("div",{class:"muted",style:{fontSize:"11px"}},paceLabel2));
+              })(),
+              (()=>{
+                const isIntensive2 = effortLaps2.length > 0;
+                const hrVals2 = isIntensive2 ? effortLaps2.filter(l=>l.average_heartrate) : null;
+                const dispHr2 = isIntensive2 ? (hrVals2.length ? hrVals2.reduce((s,l)=>s+l.average_heartrate,0)/hrVals2.length : null) : stravaRun2.average_heartrate;
+                const hrLabel2 = isIntensive2 ? "FC intervalles" : "FC moy.";
+                return dispHr2 ? el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},Math.round(dispHr2)+" bpm"),el("div",{class:"muted",style:{fontSize:"11px"}},hrLabel2)) : null;
+              })(),
               stravaRun2.max_heartrate?el("div",{},el("div",{style:{color:"#ef4444",fontSize:"13px",fontWeight:"700"}},Math.round(stravaRun2.max_heartrate)+" bpm"),el("div",{class:"muted",style:{fontSize:"11px"}},"FC max")):null
             ),
             effortLaps2.length>0?el("div",{style:{borderTop:"1px solid #fc4c0222",paddingTop:"8px"}},
@@ -1839,8 +1850,20 @@ function renderWeekDetail(weekNum) {
         el("div",{style:{display:"flex",gap:"16px",flexWrap:"wrap",marginBottom:effortLaps.length>0?"8px":"0"}},
           el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},(stravaRun.distance/1000).toFixed(2)+"km"),el("div",{class:"muted",style:{fontSize:"12px"}},"distance")),
           el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},fmtTime(stravaRun.moving_time)),el("div",{class:"muted",style:{fontSize:"12px"}},"durée")),
-          el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},fmtPace(stravaRun.average_speed)+"/km"),el("div",{class:"muted",style:{fontSize:"12px"}},"allure moy.")),
-          stravaRun.average_heartrate?el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},Math.round(stravaRun.average_heartrate)+" bpm"),el("div",{class:"muted",style:{fontSize:"12px"}},"FC moy.")):null,
+          (()=>{
+            // Si séance intensive avec laps d\'effort : afficher l\'allure/FC de l\'effort seul (hors échauffement/récup)
+            const isIntensive = effortLaps.length > 0;
+            const dispPace = isIntensive ? effortLaps.reduce((s,l)=>s+l.average_speed,0)/effortLaps.length : stravaRun.average_speed;
+            const dispHr = isIntensive ? (effortLaps.filter(l=>l.average_heartrate).length ? effortLaps.filter(l=>l.average_heartrate).reduce((s,l)=>s+l.average_heartrate,0)/effortLaps.filter(l=>l.average_heartrate).length : null) : stravaRun.average_heartrate;
+            const paceLabel = isIntensive ? "allure intervalles" : "allure moy.";
+            return el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},fmtPace(dispPace)+"/km"),el("div",{class:"muted",style:{fontSize:"12px"}},paceLabel));
+          })(),
+          (()=>{
+            const isIntensive = effortLaps.length > 0;
+            const dispHr = isIntensive ? (effortLaps.filter(l=>l.average_heartrate).length ? effortLaps.filter(l=>l.average_heartrate).reduce((s,l)=>s+l.average_heartrate,0)/effortLaps.filter(l=>l.average_heartrate).length : null) : stravaRun.average_heartrate;
+            const hrLabel = isIntensive ? "FC intervalles" : "FC moy.";
+            return dispHr ? el("div",{},el("div",{style:{color:"#fc4c02",fontSize:"13px",fontWeight:"700"}},Math.round(dispHr)+" bpm"),el("div",{class:"muted",style:{fontSize:"12px"}},hrLabel)) : null;
+          })(),
           stravaRun.max_heartrate?el("div",{},el("div",{style:{color:"#ef4444",fontSize:"13px",fontWeight:"700"}},Math.round(stravaRun.max_heartrate)+" bpm"),el("div",{class:"muted",style:{fontSize:"12px"}},"FC max")):null
         ),
         FC_ZONES[s.type]&&stravaRun.average_heartrate?el("div",{style:{display:"flex",alignItems:"center",gap:"8px",padding:"6px 0",borderTop:"1px solid #fc4c0222",marginBottom:effortLaps.length>0?"8px":"0"}},
@@ -1914,12 +1937,18 @@ function renderWeekDetail(weekNum) {
       const childrenToHide = Array.from(card.children).slice(2);
       childrenToHide.forEach(c => { c.style.display = "none"; });
 
-      // Mini résumé Strava (distance, allure, FC)
+      // Mini résumé Strava (distance globale, allure/FC de l\'effort si intensive)
       if (stravaRun) {
+        const isIntensiveSummary = effortLaps.length > 0;
+        const summaryPace = isIntensiveSummary ? effortLaps.reduce((s,l)=>s+l.average_speed,0)/effortLaps.length : stravaRun.average_speed;
+        const summaryHrVals = isIntensiveSummary ? effortLaps.filter(l=>l.average_heartrate) : null;
+        const summaryHr = isIntensiveSummary
+          ? (summaryHrVals.length ? summaryHrVals.reduce((s,l)=>s+l.average_heartrate,0)/summaryHrVals.length : null)
+          : stravaRun.average_heartrate;
         const summaryRow = el("div",{style:{display:"flex",alignItems:"center",gap:"14px",paddingTop:"6px",borderTop:"1px solid #2e334766"}},
           el("span",{style:{color:"#f97316",fontSize:"12px",fontWeight:"700"}},(stravaRun.distance/1000).toFixed(1)+" km"),
-          el("span",{style:{color:"#f97316",fontSize:"12px",fontWeight:"700"}},fmtPace(stravaRun.average_speed)+"/km"),
-          stravaRun.average_heartrate?el("span",{style:{color:"#f97316",fontSize:"12px",fontWeight:"700"}},Math.round(stravaRun.average_heartrate)+" bpm"):null,
+          el("span",{style:{color:"#f97316",fontSize:"12px",fontWeight:"700"}},fmtPace(summaryPace)+"/km"),
+          summaryHr?el("span",{style:{color:"#f97316",fontSize:"12px",fontWeight:"700"}},Math.round(summaryHr)+" bpm"):null,
           el("div",{style:{flex:"1"}}),
           el("span",{class:"muted",style:{fontSize:"11px"}},"détails ›")
         );
@@ -2665,6 +2694,7 @@ function renderSettings() {
         "🛡️ Gestion d\'erreurs réseau renforcée (Coach, météo, Gist)",
         "❓ Guide d\'utilisation dans l\'onglet Course",
         "✅ Séances terminées mieux identifiées (opacité + badge, repliables)",
+        "🎯 Allure/FC affichées sur l\'effort seul (hors échauffement) pour les séances intensives",
       ]},
       { ver:"v1.8.16", title:"Nouveau design & Inter", current:false, notes:[
         "🔤 Police Inter",
