@@ -1300,10 +1300,19 @@ function renderDashboard() {
       let detailOpen = false;
       const detailEl = el("div",{style:{display:"none",background:"#232738",borderRadius:"8px",padding:"10px 12px",marginBottom:"8px"}},
         el("div",{class:"muted",style:{fontSize:"12px",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:"8px"}},"Sources du prédicteur"),
-        ...pred.details.map(d => el("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:"4px"}},
-          el("span",{class:"muted",style:{fontSize:"13px"}},d.label),
-          el("span",{style:{color:"#f1f5f9",fontSize:"13px",fontWeight:"600"}},d.value)
-        )),
+        ...pred.details.map(d => {
+          // Séparer "TYPE · N séances · dernier DATE" en deux lignes
+          const parts = d.label.split(" · dernier ");
+          const mainLabel = parts[0];
+          const dateLabel = parts[1] ? "dernier " + parts[1] : null;
+          return el("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"6px"}},
+            el("div",{},
+              el("div",{class:"muted",style:{fontSize:"13px"}},mainLabel),
+              dateLabel ? el("div",{class:"muted",style:{fontSize:"12px",opacity:"0.7"}},dateLabel) : null
+            ),
+            el("span",{style:{color:"#f1f5f9",fontSize:"13px",fontWeight:"600",whiteSpace:"nowrap",marginLeft:"8px"}},d.value)
+          );
+        }),
         el("div",{style:{borderTop:"1px solid #2e3347",marginTop:"6px",paddingTop:"6px",display:"flex",justifyContent:"space-between"}},
           el("span",{class:"muted",style:{fontSize:"13px"}},"Méthode"),
           el("span",{style:{color:"#f1f5f9",fontSize:"13px"}},pred.method)
@@ -2683,48 +2692,51 @@ function renderSettings() {
   // ── Profil coureur + Objectif + PPS ─────────────────────────────────────
   const profileSection = el("div",{style:{marginBottom:"16px"}},
     el("div",{class:"label"},"👤 Profil & objectif"),
-    el("div",{style:{background:"#1a1d27",border:"1px solid #2e3347",borderRadius:"10px",padding:"14px",display:"flex",flexDirection:"column",gap:"12px"}},
-      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
-        el("span",{class:"muted",style:{fontSize:"15px"}},"Poids"),
-        el("div",{style:{display:"flex",alignItems:"center",gap:"6px",width:"110px",justifyContent:"flex-end"}},
-          el("input",{type:"number",id:"inp-poids",placeholder:"kg",style:{width:"72px",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"5px 8px",color:"#f1f5f9",fontSize:"15px",textAlign:"right"},value:runnerWeight||""}),
-          el("span",{class:"muted",style:{fontSize:"14px",minWidth:"36px",display:"inline-block",textAlign:"left"}},"kg")
-        )
-      ),
-      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
-        el("span",{class:"muted",style:{fontSize:"15px"}},"Taille"),
-        el("div",{style:{display:"flex",alignItems:"center",gap:"6px",width:"110px",justifyContent:"flex-end"}},
-          el("input",{type:"number",id:"inp-taille",placeholder:"cm",style:{width:"72px",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"5px 8px",color:"#f1f5f9",fontSize:"15px",textAlign:"right"},value:runnerHeight||""}),
-          el("span",{class:"muted",style:{fontSize:"14px",minWidth:"36px",display:"inline-block",textAlign:"left"}},"cm")
-        )
-      ),
-      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
-        el("span",{class:"muted",style:{fontSize:"15px"}},"FC max"),
-        el("div",{style:{display:"flex",alignItems:"center",gap:"6px",width:"110px",justifyContent:"flex-end"}},
-          el("input",{type:"number",id:"inp-fcmax",style:{width:"72px",background:"#232738",border:"1px solid #2e3347",borderRadius:"6px",padding:"5px 8px",color:"#f1f5f9",fontSize:"15px",textAlign:"right"},value:runnerFcMax||181}),
-          el("span",{class:"muted",style:{fontSize:"14px",minWidth:"36px",display:"inline-block",textAlign:"left"}},"bpm")
-        )
-      ),
-      el("div",{style:{height:"1px",background:"#2e3347"}}),
-      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
-        el("span",{class:"muted",style:{fontSize:"15px"}},"Objectif"),
-        el("div",{style:{display:"flex",alignItems:"center",gap:"6px"}},
-          el("input",{type:"text",id:"inp-goal",placeholder:"48:30",style:{width:"82px",background:"#232738",border:"1px solid #f9731644",borderRadius:"6px",padding:"5px 8px",color:"#f97316",fontSize:"15px",fontWeight:"700",textAlign:"right"},value:Math.floor(raceGoalTime/60)+":"+(raceGoalTime%60).toString().padStart(2,"0")}),
-          el("span",{class:"muted",style:{fontSize:"14px"}},fmtPace(10000/raceGoalTime)+"/km")
-        )
-      ),
-      el("div",{style:{height:"1px",background:"#2e3347"}}),
-      el("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
-        el("span",{class:"muted",style:{fontSize:"15px"}},"PPS"),
-        (()=>{
-          const inp = document.createElement("input");
-          inp.type = "text"; inp.id = "pps-input"; inp.placeholder = "Code PPS...";
-          inp.style.cssText = "width:120px;background:#232738;border:1px solid #2e3347;border-radius:6px;padding:4px 8px;color:#f1f5f9;font-size:13px;text-align:right;";
-          inp.value = runnerPps || "";
-          return inp;
-        })()
-      )
-    )
+    (()=>{
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "background:#1a1d27;border:1px solid #2e3347;border-radius:10px;padding:14px;";
+      const tbl = document.createElement("table");
+      tbl.style.cssText = "width:100%;border-collapse:collapse;";
+      const rows = [
+        {label:"Poids", id:"inp-poids", type:"number", unit:"kg", val:runnerWeight||""},
+        {label:"Taille", id:"inp-taille", type:"number", unit:"cm", val:runnerHeight||""},
+        {label:"FC max", id:"inp-fcmax", type:"number", unit:"bpm", val:runnerFcMax||181},
+        {label:"separator"},
+        {label:"Objectif", id:"inp-goal", type:"text", unit:fmtPace(10000/raceGoalTime)+"/km", val:Math.floor(raceGoalTime/60)+":"+(raceGoalTime%60).toString().padStart(2,"0"), color:"#f97316"},
+        {label:"PPS", id:"pps-input", type:"text", unit:"", val:runnerPps||"", width:"120px"},
+      ];
+      rows.forEach((r,i)=>{
+        const tr = document.createElement("tr");
+        if (r.label==="separator") {
+          const td = document.createElement("td");
+          td.colSpan = 3;
+          td.style.cssText = "padding:0;border-top:1px solid #2e3347;";
+          tr.appendChild(td);
+          tbl.appendChild(tr);
+          return;
+        }
+        if (i>0) tr.style.cssText = "border-top:1px solid #2e334722;";
+        const tdLabel = document.createElement("td");
+        tdLabel.style.cssText = "padding:8px 0;color:#94a3b8;font-size:15px;";
+        tdLabel.textContent = r.label;
+        const tdInput = document.createElement("td");
+        tdInput.style.cssText = "padding:8px 0;text-align:right;";
+        const inp = document.createElement("input");
+        inp.type = r.type; inp.id = r.id;
+        const inputColor = r.color || "#f1f5f9";
+        const inputWidth = r.width || "80px";
+        inp.style.cssText = "width:"+inputWidth+";background:#232738;border:1px solid "+(r.color?"#f9731644":"#2e3347")+";border-radius:6px;padding:5px 8px;color:"+inputColor+";font-size:15px;text-align:right;font-family:inherit;font-variant-numeric:tabular-nums;font-weight:"+(r.color?"700":"400")+";";
+        inp.value = r.val;
+        tdInput.appendChild(inp);
+        const tdUnit = document.createElement("td");
+        tdUnit.style.cssText = "padding:8px 0 8px 8px;color:#94a3b8;font-size:14px;width:36px;white-space:nowrap;";
+        tdUnit.textContent = r.unit;
+        tr.appendChild(tdLabel); tr.appendChild(tdInput); tr.appendChild(tdUnit);
+        tbl.appendChild(tr);
+      });
+      wrap.appendChild(tbl);
+      return wrap;
+    })(),
   );
 
     const stravaSection=el("div",{style:{marginBottom:"24px"}},
