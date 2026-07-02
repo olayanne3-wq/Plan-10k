@@ -3108,13 +3108,11 @@ function getAvailableSlots(week, excludeIdx) {
     if (i === excludeIdx) return null;
     const effective = getEffectiveSession(week, i);
     if (!effective) return null;
-    console.log("SLOT "+i+": effective.type="+effective.type+" hidden="+!!hiddenSessions[uid]+" swapped="+!!swappedSessions[uid]);
     if (effective.type === "REPOS") return {idx:i, uid, date:s.date, label:"Repos"};
     if (hiddenSessions[uid]) return {idx:i, uid, date:s.date, label:effective.type+" (masquee)"};
     return null;
   }).filter(Boolean);
-  console.log("AVAILABLE SLOTS:", JSON.stringify(slots));
-  return slots;
+return slots;
 }
 
 function showSessionMenu(week, slotIdx) {
@@ -3209,7 +3207,6 @@ function showSessionMenu(week, slotIdx) {
 
 function showMoveMenu(week, slotIdx) {
   const slots = getAvailableSlots(week, slotIdx);
-  console.log("showMoveMenu: slotIdx="+slotIdx+" slots="+JSON.stringify(slots)+" swapped="+JSON.stringify(swappedSessions));
   if (!slots.length) { alert("Aucun jour disponible cette semaine. Slots vides pour idx="+slotIdx); return; }
 
   document.querySelectorAll(".sess-overlay").forEach(m=>m.remove());
@@ -3235,19 +3232,20 @@ function showMoveMenu(week, slotIdx) {
     btn.addEventListener("click", () => {
       const uidA = week.week+"-"+slotIdx;
       const uidB = slot.uid;
-      console.log("CLICK SWAP: uidA="+uidA+" uidB="+uidB);
-      // Annuler les anciens swaps impliquant ces slots
+      // Si uidA etait deja swappé avec uidB → annuler (retour a l'original)
+      const wasAlreadySwapped = swappedSessions[uidA] === uidB;
+      // Annuler tous les swaps impliquant ces deux slots
       Object.keys(swappedSessions).forEach(k => {
         if (swappedSessions[k]===uidA || k===uidA ||
             swappedSessions[k]===uidB || k===uidB) {
           delete swappedSessions[k];
         }
       });
-      console.log("AFTER CLEAR: swapped="+JSON.stringify(swappedSessions));
-      // Nouveau swap
-      swappedSessions[uidA] = uidB;
-      swappedSessions[uidB] = uidA;
-      console.log("AFTER SWAP: swapped="+JSON.stringify(swappedSessions));
+      // Si ce n'est pas un retour a l'original, créer le nouveau swap
+      if (!wasAlreadySwapped) {
+        swappedSessions[uidA] = uidB;
+        swappedSessions[uidB] = uidA;
+      }
       save("lk_swapped_sessions", swappedSessions);
       gistSave(true);
       overlay.remove();
