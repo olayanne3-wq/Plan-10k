@@ -542,15 +542,6 @@ const PLAN = [
 const ALL_SESSIONS = PLAN.flatMap(w => w.sessions.map((s,i) => ({...s, week:w.week, phase:w.phase, uid:`${w.week}-${i}`})));
 // Appliquer les déplacements sauvegardés
 function applyMovedSessions() {
-  console.log("APPLY START: movedSessions="+JSON.stringify(movedSessions));
-  console.log("APPLY START: ALL_SESSIONS[5].uid="+ALL_SESSIONS[5].uid+" type="+typeof ALL_SESSIONS[5].uid);
-  const movedKeys = Object.keys(movedSessions);
-  console.log("APPLY START: movedKeys="+JSON.stringify(movedKeys));
-  if (movedKeys.length > 0) {
-    const testUid = movedKeys[0];
-    const found = ALL_SESSIONS.find(s => s.uid === testUid);
-    console.log("APPLY START: search uid="+testUid+" found="+!!found);
-  }
   // D'abord remettre toutes les dates depuis PLAN (reset)
   PLAN.forEach(w => {
     w.sessions.forEach((ps, i) => {
@@ -561,12 +552,8 @@ function applyMovedSessions() {
   });
   // Ensuite appliquer les deplacements
   ALL_SESSIONS.forEach(s => {
-    if (movedSessions[s.uid]) {
-      console.log("APPLY: uid="+s.uid+" date="+s.date+" -> "+movedSessions[s.uid]);
-      s.date = movedSessions[s.uid];
-    }
+    if (movedSessions[s.uid]) s.date = movedSessions[s.uid];
   });
-  console.log("APPLY: ALL_SESSIONS uids="+ALL_SESSIONS.slice(0,5).map(s=>s.uid+"="+s.date).join(", "));
 }
 
 const INTERVAL_SESSION_DATES = new Set(
@@ -2101,12 +2088,13 @@ function renderWeekDetail(weekNum) {
   const week=PLAN.find(w=>w.week===weekNum);
   if (!week) return el("div",{},"—");
   const t=today();
-  const weekDates=week.sessions.map(s=>s.date);
+  const weekSessions = ALL_SESSIONS.filter(s=>s.week===weekNum);
+  const weekDates=weekSessions.map(s=>s.date);
   const weekRuns=stravaActivities.filter(a=>a.type==="Run"&&weekDates.includes(a.start_date_local?.slice(0,10)));
 
-  const cards=week.sessions.map((s,i)=>{
-     // Annoter l'uid sur la session
-     s.uid = weekNum+"-"+i;
+  const cards=weekSessions.map((s,i)=>{
+     // uid deja dans ALL_SESSIONS
+     // Seance masquee : afficher en grise avec option restaurer
      // Seance masquee : afficher en grise avec option restaurer
      if (hiddenSessions[s.uid]) {
        const hCard = el("div",{style:{background:"#1a1d2766",border:"1px dashed #2e3347",borderRadius:"12px",padding:"10px 14px",marginBottom:"8px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",opacity:"0.6"}},
@@ -3409,12 +3397,8 @@ function showMoveMenu(s, week) {
       const planWeek = PLAN.find(w => w.week === origWeekNum);
       const origDate = planWeek ? planWeek.sessions[origIdx].date : s.date;
 
-      // Debug
-      console.log("MOVE: uid="+s.uid+" origDate="+origDate+" -> targetDate="+target.date);
-      console.log("MOVE: movedSessions avant="+JSON.stringify(movedSessions));
       // Sauvegarder le deplacement
       movedSessions[s.uid] = target.date;
-      console.log("MOVE: movedSessions apres="+JSON.stringify(movedSessions));
 
       // Si la cible etait masquee, la restaurer a la date d'origine de s
       if (target.type !== "REPOS") {
