@@ -3361,10 +3361,23 @@ function exportPdfRecap() {
     wk.sessions.forEach((s,i)=>{
       if(s.type==="REPOS") return;
       const uid=wk.week+"-"+i;
-      const eff=getEffectiveSession(wk,i);
+      const eff=getEffectiveSession(wk,i)||s;
       const st=statuses[uid]||"-";
-      doc.setFontSize(9); doc.setFont("helvetica","normal");
-      doc.text(s.date+" - "+eff.type+" - "+eff.session.slice(0,50)+" -> "+st,M+4,y); y+=5;
+      const strava=stravaActivities.find(a=>a.start_date_local&&a.start_date_local.slice(0,10)===s.date);
+      let line=s.date+" | "+eff.type+" | "+eff.session.slice(0,35)+" | "+st;
+      if(strava){
+        const km=Math.round(strava.distance/100)/10;
+        const pace=Math.floor((1000/strava.average_speed)/60)+":"+(Math.round((1000/strava.average_speed)%60)).toString().padStart(2,"0");
+        const hr=strava.average_heartrate?Math.round(strava.average_heartrate)+"bpm":"";
+        line+=" | "+km+"km "+pace+"/km"+(hr?" "+hr:"");
+      }
+      doc.setFontSize(8); doc.setFont("helvetica","normal");
+      const statusColor=st==="✅"?[34,197,94]:st==="⚠️"?[234,179,8]:st==="❌"?[239,68,68]:[100,100,100];
+      doc.setTextColor(...statusColor);
+      doc.text(st, M+4, y);
+      doc.setTextColor(30,30,30);
+      doc.text(line.slice(line.indexOf("|")+2), M+10, y);
+      y+=5;
       if(y>270){doc.addPage();y=20;}
     });
     y+=3;
@@ -3442,7 +3455,7 @@ function renderHelp() {
     { icon:"⚡", color:"#f97316", title:"Dashboard",
       text:"Ta séance du jour, ton estimation de temps mise à jour automatiquement, et les conseils personnalisés de Léa selon ta progression." },
     { icon:"📅", color:"#60a5fa", title:"Semaines",
-      text:"Le détail de chaque semaine d\'entraînement. Tape sur une séance pour voir le détail et la valider ✅ (réussie), ⚠️ (partielle) ou ❌ (ratée). Les séances déjà validées sont repliées — tape dessus pour revoir le détail." },
+      text:"Le detail de chaque semaine. Tape sur une seance pour la valider (reussie, adaptee ou ratee). Appui long (~1 sec) pour acceder au menu : deplacer vers un jour repos, supprimer ou restaurer. Une seance deplacee peut revenir a sa place en la deplacant de nouveau vers son jour original." },
     { icon:"📊", color:"#a855f7", title:"Stats",
       text:"Ta progression vers l\'objectif, ton Indice d\'Économie (IE) et ta cadence par type de séance, ainsi qu\'un référentiel complet des allures et zones FC." },
     { icon:"🏁", color:"#22c55e", title:"Course",
